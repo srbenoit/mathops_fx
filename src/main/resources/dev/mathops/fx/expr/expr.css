@@ -1,0 +1,7 @@
+.exprfield {
+    -fx-background-color: #FFFFFF;
+}
+.exprfield:focused {
+    -fx-border-color: #88CCFF;
+    -fx-border-width: 2px;
+}
