@@ -35,10 +35,7 @@ runtime {
         resourceDir = file("package/")
         if (targetPlatformName == "mac") {
             targetPlatform("mac") {
-                // Use downloaded Bellsoft Liberica JDK with JavaFX bundled!
                 jdkHome = "/Volumes/Fastdrive/Development/JDKs/Bellsoft/mac/jdk-17.0.5-full.jdk"
-                // We also could directly download a JDK
-                //jdkHome = jdkDownload("https://download.java.net/java/GA/jdk17.0.1/2a2082e5a09d4267845be086888add4f/12/GPL/openjdk-17.0.1_macos-x64_bin.tar.gz")
             }
             installerType = "pkg"
         }
@@ -102,6 +99,9 @@ dependencies {
     implementation(files("../../IDEA/mathops_commons/out/libs/mathops_commons.jar"))
     implementation(files("../../IDEA/mathops_text/out/libs/mathops_text.jar"))
     implementation(files("../../IDEA/mathops/out/libs/mathops.jar"))
+    implementation("org.postgresql:postgresql:42.7.5")
+    implementation("com.ibm.informix:jdbc:4.50.10")
+    implementation("com.oracle.database.jdbc:ojdbc11:23.4.0.24.05")
 
     implementation("org.apache.pdfbox:pdfbox:3.0.4")
 }

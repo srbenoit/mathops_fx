@@ -9,14 +9,20 @@ import dev.mathops.commons.log.LogWriter;
 import dev.mathops.commons.log.LoggingSubsystem;
 import dev.mathops.db.DbConnection;
 import dev.mathops.db.EDbUse;
+import dev.mathops.db.ESchema;
 import dev.mathops.db.cfg.Data;
 import dev.mathops.db.cfg.Database;
 import dev.mathops.db.cfg.DatabaseConfig;
 import dev.mathops.db.cfg.DatabaseConfigXml;
+import dev.mathops.db.cfg.Facet;
+import dev.mathops.db.cfg.Login;
+import dev.mathops.db.cfg.Profile;
 import dev.mathops.db.cfg.Server;
 import dev.mathops.text.parser.ParsingException;
 import javafx.application.Application;
 import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -25,7 +31,10 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.image.Image;
 import javafx.scene.layout.Border;
@@ -43,7 +52,10 @@ import javafx.stage.Stage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A JavaFX version of the administrative application.  This class simply presents a login window and manages the login
@@ -68,7 +80,13 @@ import java.util.List;
  * Once there is a successful login for each schema type, this class constructs a custom database profile using the
  * selected schemas and presents that to the main application window.
  */
-public final class Admin extends Application {
+public final class Admin extends Application implements EventHandler<ActionEvent> {
+
+    /** An user data object to identify the action to perform. */
+    private static final String LOGIN_CMD = "LOGIN";
+
+    /** An user data object to identify the action to perform. */
+    private static final String CANCEL_CMD = "CANCEL";
 
     /** The stage. */
     private Stage stage;
@@ -84,6 +102,18 @@ public final class Admin extends Application {
 
     /** A grid pane to display available development schemas. */
     private GridPane developmentGrid;
+
+    /** The production radio buttons. */
+    private final List<RadioButton> productionRadioButtons;
+
+    /** The development radio buttons. */
+    private final List<RadioButton> developmentRadioButtons;
+
+    /** The username. */
+    private TextField username;
+
+    /** The password. */
+    private PasswordField password;
 
     /**
      * Constructs a new {@code Admin}.
@@ -101,6 +131,8 @@ public final class Admin extends Application {
         final LogWriter logWriter = Log.getWriter();
         logWriter.startList(1000);
 
+        this.productionRadioButtons = new ArrayList<>(10);
+        this.developmentRadioButtons = new ArrayList<>(10);
     }
 
     /**
@@ -190,8 +222,6 @@ public final class Admin extends Application {
      */
     private Scene createScene(final DatabaseConfig databaseConfig) {
 
-        final List<Server> servers = databaseConfig.getServers();
-
         final Parameters parameters = getParameters();
 
         final VBox root = new VBox();
@@ -206,10 +236,15 @@ public final class Admin extends Application {
         final FlowPane flow1 = new FlowPane();
         flow1.setAlignment(Pos.BASELINE_CENTER);
 
-        final BorderStroke grayStroke = new BorderStroke(Color.LIGHTGRAY, BorderStrokeStyle.SOLID, null,
+        final BorderStroke bottomStroke = new BorderStroke(Color.LIGHTGRAY, BorderStrokeStyle.SOLID, null,
                 new BorderWidths(0.0, 0.0, 1.0, 0.0));
-        final Border border = new Border(grayStroke);
-        flow1.setBorder(border);
+        final Border bottomBorder = new Border(bottomStroke);
+
+        final BorderStroke topStroke = new BorderStroke(Color.LIGHTGRAY, BorderStrokeStyle.SOLID, null,
+                new BorderWidths(1.0, 0.0, 0.0, 0.0));
+        final Border topBorder = new Border(topStroke);
+
+        flow1.setBorder(bottomBorder);
 
         final Label lbl1 = new Label("Precalculus Program Administration");
         lbl1.setFont(headingFont1);
@@ -248,6 +283,7 @@ public final class Admin extends Application {
         final FlowPane flow4 = new FlowPane();
         flow4.setPadding(new Insets(10.0, 0.0, 6.0, 0.0));
         flow4.setAlignment(Pos.BASELINE_LEFT);
+        flow4.setBorder(topBorder);
 
         final Label lbl4 = new Label("Select servers to provide schemas:");
         lbl4.setFont(headingFont2);
@@ -257,80 +293,335 @@ public final class Admin extends Application {
 
         final StackPane stack = new StackPane();
 
-        this.productionGrid = new GridPane(10.0, 10.0);
-        this.productionGrid.setPadding(new Insets(0.0, 0.0, 10.0, 20.0));
-        this.developmentGrid = new GridPane();
-        this.developmentGrid.setPadding(new Insets(0.0, 0.0, 10.0, 20.0));
+        this.productionGrid = buildSchemaGrid(databaseConfig, EDbUse.PROD, bodyFont, this.productionRadioButtons);
+        this.developmentGrid = buildSchemaGrid(databaseConfig, EDbUse.DEV, bodyFont, this.developmentRadioButtons);
         this.developmentGrid.setVisible(false);
         stack.getChildren().addAll(this.productionGrid, this.developmentGrid);
 
-        // In each grid, present the list of schemas along the top
-        final Label prodLegacy = new Label("Legacy");
-        GridPane.setConstraints(prodLegacy, 1, 0); // column=2 row=0
-        final Label prodSystem = new Label("System");
-        GridPane.setConstraints(prodSystem, 2, 0); // column=2 row=0
-        final Label prodMain = new Label("Main");
-        GridPane.setConstraints(prodMain, 3, 0); // column=2 row=0
-        final Label prodExtern = new Label("External");
-        GridPane.setConstraints(prodExtern, 4, 0); // column=2 row=0
-        final Label prodAnalytic = new Label("Analytic");
-        GridPane.setConstraints(prodAnalytic, 5, 0); // column=2 row=0
-        final Label prodTerm = new Label("Term");
-        GridPane.setConstraints(prodTerm, 6, 0); // column=2 row=0
-        this.productionGrid.getChildren().addAll(prodLegacy, prodSystem, prodMain, prodExtern, prodAnalytic, prodTerm);
+        // Username and password
 
-        for (final Server server : servers) {
-            for (final Database database : server.getDatabases()) {
-                for (final Data data : database.getData()) {
-                    if (data.use == EDbUse.PROD) {
-                        // TODO: If the database provides any of the needed schemas, create a grid row with
-                        //  radio buttons for each supported schema.  If this is the first database that supports
-                        //  a schema, select that one.  Do we need some way to mark in the database config XML
-                        //  that a particular database should be "default" for a schema?
-                    }
-                }
-            }
-        }
+        final FlowPane flow5 = new FlowPane();
+        flow5.setAlignment(Pos.BASELINE_LEFT);
+        flow5.setBorder(topBorder);
 
-        // TODO: store the user's selections for both production and development schema providers in preferences
-        //  object and re-use each time the program runs.
+        final Label lbl5 = new Label("Provide login credentials:");
+        lbl5.setFont(headingFont2);
+        lbl5.setTextFill(Color.FIREBRICK);
+        final ObservableList<Node> flow5Children = flow5.getChildren();
+        flow5Children.add(lbl5);
 
-        final Label devLegacy = new Label("Legacy");
-        GridPane.setConstraints(devLegacy, 1, 0); // column=2 row=0
-        final Label devSystem = new Label("System");
-        GridPane.setConstraints(devSystem, 2, 0); // column=2 row=0
-        final Label devMain = new Label("Main");
-        GridPane.setConstraints(devMain, 3, 0); // column=2 row=0
-        final Label devExtern = new Label("External");
-        GridPane.setConstraints(devExtern, 4, 0); // column=2 row=0
-        final Label devAnalytic = new Label("Analytic");
-        GridPane.setConstraints(devAnalytic, 5, 0); // column=2 row=0
-        final Label devTerm = new Label("Term");
-        GridPane.setConstraints(devTerm, 6, 0); // column=2 row=0
-        this.developmentGrid.getChildren().addAll(devLegacy, devSystem, devMain, devExtern, devAnalytic, devTerm);
+        final GridPane credentialsGrid = new GridPane(10, 10);
+        credentialsGrid.setPadding(new Insets(6.0, 0.0, 10.0, 20.0));
+
+        final Label usernameLbl = new Label("Username:");
+        usernameLbl.setFont(bodyFont);
+        GridPane.setConstraints(usernameLbl, 0, 0);
+
+        this.username = new TextField();
+        this.username.setFont(bodyFont);
+        GridPane.setConstraints(this.username, 1, 0);
+
+        final Label passwordLbl = new Label("Password:");
+        passwordLbl.setFont(bodyFont);
+        GridPane.setConstraints(passwordLbl, 0, 1);
+
+        this.password = new PasswordField();
+        this.password.setFont(bodyFont);
+        GridPane.setConstraints(this.password, 1, 1);
+
+        final ObservableList<Node> credentialsGridChildren = credentialsGrid.getChildren();
+        credentialsGridChildren.addAll(usernameLbl, this.username, passwordLbl, this.password);
 
         // Buttons
 
         final FlowPane flow9 = new FlowPane(24.0, 0.0);
         flow9.setPadding(new Insets(10.0, 0.0, 0.0, 0.0));
 
-        final BorderStroke topStroke = new BorderStroke(Color.LIGHTGRAY, BorderStrokeStyle.SOLID, null,
-                new BorderWidths(1.0, 0.0, 0.0, 0.0));
-        final Border border9 = new Border(topStroke);
-        flow9.setBorder(border9);
+        flow9.setBorder(topBorder);
 
         flow9.setAlignment(Pos.BASELINE_CENTER);
 
         final Button login = new Button("Login");
         login.setFont(bodyFont);
+        login.setUserData(LOGIN_CMD);
+        login.setOnAction(this);
         final Button cancel = new Button("Cancel");
         cancel.setFont(bodyFont);
+        cancel.setUserData(CANCEL_CMD);
+        cancel.setOnAction(this);
         flow9.getChildren().addAll(login, cancel);
 
         final ObservableList<Node> rootChildren = root.getChildren();
-        rootChildren.addAll(flow1, flow2, flow3, flow4, stack, flow9);
+        rootChildren.addAll(flow1, flow2, flow3, flow4, stack, flow5, credentialsGrid, flow9);
 
         return new Scene(root);
+    }
+
+    /**
+     * Constructs a grid of available schema implementations.
+     *
+     * @param databaseConfig the database configuration
+     * @param use            the use (production or development)
+     * @param bodyFont       the font for grid entries
+     * @param list           the list to which to add all constructed buttons
+     * @return the grid pane
+     */
+    private GridPane buildSchemaGrid(final DatabaseConfig databaseConfig, final EDbUse use, final Font bodyFont,
+                                     final List<RadioButton> list) {
+
+        final List<Server> servers = databaseConfig.getServers();
+
+        final GridPane grid = new GridPane(10.0, 10.0);
+        grid.setPadding(new Insets(0.0, 0.0, 10.0, 20.0));
+
+        // In each grid, present the list of schemas along the top
+        final Label prodLegacy = new Label("Legacy");
+        prodLegacy.setFont(bodyFont);
+        GridPane.setConstraints(prodLegacy, 1, 0);
+        final Label prodSystem = new Label("System");
+        prodSystem.setFont(bodyFont);
+        GridPane.setConstraints(prodSystem, 2, 0);
+        final Label prodMain = new Label("Main");
+        prodMain.setFont(bodyFont);
+        GridPane.setConstraints(prodMain, 3, 0);
+        final Label prodExtern = new Label("External");
+        prodExtern.setFont(bodyFont);
+        GridPane.setConstraints(prodExtern, 4, 0);
+        final Label prodAnalytic = new Label("Analytic");
+        prodAnalytic.setFont(bodyFont);
+        GridPane.setConstraints(prodAnalytic, 5, 0);
+        final Label prodTerm = new Label("Term");
+        prodTerm.setFont(bodyFont);
+        GridPane.setConstraints(prodTerm, 6, 0);
+        final Label prodOds = new Label("ODS");
+        prodOds.setFont(bodyFont);
+        GridPane.setConstraints(prodOds, 7, 0);
+
+        final ObservableList<Node> gridChildren = grid.getChildren();
+        gridChildren.addAll(prodLegacy, prodSystem, prodMain, prodExtern, prodAnalytic, prodTerm, prodOds);
+
+        final ToggleGroup legacyGroup = new ToggleGroup();
+        final ToggleGroup systemGroup = new ToggleGroup();
+        final ToggleGroup mainGroup = new ToggleGroup();
+        final ToggleGroup externGroup = new ToggleGroup();
+        final ToggleGroup analyticsGroup = new ToggleGroup();
+        final ToggleGroup termGroup = new ToggleGroup();
+
+        final ObservableList<Toggle> legacyToggles = legacyGroup.getToggles();
+        final ObservableList<Toggle> systemToggles = systemGroup.getToggles();
+        final ObservableList<Toggle> mainToggles = mainGroup.getToggles();
+        final ObservableList<Toggle> externToggles = externGroup.getToggles();
+        final ObservableList<Toggle> analyticsToggles = analyticsGroup.getToggles();
+        final ObservableList<Toggle> termToggles = termGroup.getToggles();
+
+        boolean needLegacy = true;
+        boolean needSystem = true;
+        boolean needMain = true;
+        boolean needExtern = true;
+        boolean needAnalytics = true;
+        boolean needTerm = true;
+        boolean needOds = true;
+        boolean needLive = true;
+
+        int row = 1;
+        for (final Server server : servers) {
+            for (final Database database : server.getDatabases()) {
+
+                // See if we should include a row for this database
+                boolean hasLegacy = false;
+                boolean hasSystem = false;
+                boolean hasMain = false;
+                boolean hasExtern = false;
+                boolean hasAnalytics = false;
+                boolean hasTerm = false;
+                boolean hasOds = false;
+                boolean hasLive = false;
+                for (final Data data : database.getData()) {
+                    if (data.use == EDbUse.PROD) {
+                        hasLegacy = hasLegacy || data.schema == ESchema.LEGACY;
+                        hasSystem = hasSystem || data.schema == ESchema.SYSTEM;
+                        hasMain = hasMain || data.schema == ESchema.MAIN;
+                        hasExtern = hasExtern || data.schema == ESchema.EXTERN;
+                        hasAnalytics = hasAnalytics || data.schema == ESchema.ANALYTICS;
+                        hasTerm = hasTerm || data.schema == ESchema.TERM;
+                        hasOds = hasOds || data.schema == ESchema.ODS;
+                        hasLive = hasLive || data.schema == ESchema.LIVE;
+                    }
+                }
+
+                if (hasLegacy || hasSystem || hasMain || hasExtern || hasAnalytics || hasTerm) {
+                    final String name = server.type.name + " (" + database.id + ")";
+                    final Label nameLbl = new Label(name);
+                    nameLbl.setFont(bodyFont);
+                    GridPane.setConstraints(nameLbl, 0, row);
+                    gridChildren.add(nameLbl);
+
+                    // We "turn off" the "hasTerm" boolean when we find a match so we don't display duplicates.
+                    // A database may have many data objects that provide the "TERM" schema for various terms, but
+                    // client code can choose the proper one at runtime once we can log in.
+
+                    for (final Data data : database.getData()) {
+                        if (data.use == EDbUse.PROD) {
+
+                            if (data.schema == ESchema.LEGACY) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                legacyToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 1, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needLegacy) {
+                                    btn.setSelected(true);
+                                    needLegacy = false;
+                                }
+                            } else if (data.schema == ESchema.SYSTEM) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                systemToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 2, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needSystem) {
+                                    btn.setSelected(true);
+                                    needSystem = false;
+                                }
+                            } else if (data.schema == ESchema.MAIN) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                mainToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 3, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needMain) {
+                                    btn.setSelected(true);
+                                    needMain = false;
+                                }
+                            } else if (data.schema == ESchema.EXTERN) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                externToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 4, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needExtern) {
+                                    btn.setSelected(true);
+                                    needExtern = false;
+                                }
+                            } else if (data.schema == ESchema.ANALYTICS) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                analyticsToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 5, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needAnalytics) {
+                                    btn.setSelected(true);
+                                    needAnalytics = false;
+                                }
+                            } else if (hasTerm && data.schema == ESchema.TERM) {
+                                final RadioButton btn = new RadioButton();
+                                btn.setUserData(data);
+                                termToggles.add(btn);
+                                btn.setFont(bodyFont);
+                                GridPane.setConstraints(btn, 6, row);
+                                gridChildren.add(btn);
+                                list.add(btn);
+                                if (needTerm) {
+                                    btn.setSelected(true);
+                                    needTerm = false;
+                                }
+                                hasTerm = false;
+                            }
+                        }
+                    }
+
+                    ++row;
+                }
+
+                if (hasOds && needOds) {
+
+                    // TODO: Add a radio button with this data (but do not add to grid), so we include it in the
+                    //  synthetic profile
+
+                    needOds = false;
+                }
+
+                if (hasLive && needLive) {
+
+                    // TODO: Add a radio button with this data (but do not add to grid), so we include it in the
+                    //  synthetic profile
+
+                    needLive = false;
+                }
+            }
+        }
+
+        return grid;
+    }
+
+    /**
+     * Handles actions generated by buttons.
+     *
+     * @param actionEvent the action event
+     */
+    @Override
+    public void handle(final ActionEvent actionEvent) {
+
+        if (actionEvent.getSource() instanceof final Button btn) {
+            final Object cmd = btn.getUserData();
+
+            if (LOGIN_CMD.equals(cmd)) {
+                handleLogin();
+            } else if (CANCEL_CMD.equals(cmd)) {
+                this.stage.close();
+            }
+        }
+    }
+
+    /**
+     * Handles a request to log in.
+     */
+    private void handleLogin() {
+
+        final String theUsername = this.username.getText();
+        final String thePassword = this.password.getText();
+
+        if (theUsername.isBlank()) {
+            this.username.requestFocus();
+        } else if (thePassword.isBlank()) {
+            this.password.requestFocus();
+        } else {
+            final Profile newProfile = new Profile("SYNTHETIC_PROFILE");
+
+            final Map<Database, Login> logins = new HashMap<>(5);
+
+            if (this.production.isSelected()) {
+                Log.info("Login to Production");
+
+                for (final RadioButton button : this.productionRadioButtons) {
+                    if (button.isSelected()) {
+                        final Object userData = button.getUserData();
+                        if (userData instanceof final Data data) {
+                            final Login login = logins.computeIfAbsent(data.database,
+                                    a -> new Login(data.database, data.id, theUsername, thePassword));
+                            final Facet facet = new Facet(data, login);
+                            newProfile.addFacet(facet);
+                        }
+                    }
+                }
+            } else {
+                Log.info("Login to Development");
+
+            }
+        }
+
+        // TODO: store the user's selections for both production and development schema providers in preferences
+        //  object and re-use each time the program runs.
     }
 
     /**
